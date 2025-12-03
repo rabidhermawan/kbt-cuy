@@ -64,6 +64,7 @@ func main() {
 		// Return Flow
 		authorized.GET("/return", rentalHandler.ShowReturnStations)
 		authorized.POST("/return", rentalHandler.ReturnPowerbank)
+		authorized.POST("/return/retry-open", rentalHandler.RetryReturnOpenDoor) // New Route
 	}
 
 	r.Run(":8080")

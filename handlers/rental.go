@@ -100,7 +100,7 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 
 	tx.Commit()
 
-	// AUTOMATIC TRIGGER: Open the door immediately upon successful processing
+	// AUTOMATIC TRIGGER
 	go esp32.TriggerLock(station.IPAddress, "open")
 
 	// Render Success Page
@@ -111,14 +111,13 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 	})
 }
 
-// RetryOpenDoor allows manual triggering from the success page
+// RetryOpenDoor allows manual triggering from the rental success page
 func (h *RentalHandler) RetryOpenDoor(c *gin.Context) {
 	txID, _ := strconv.Atoi(c.PostForm("transaction_id"))
 	session := sessions.Default(c)
 	userID := session.Get("user_id").(uint)
 
 	var transaction models.Transaction
-	// Validate that this transaction belongs to the logged-in user and is recent/ongoing
 	if err := h.DB.Preload("PowerbankStationOrigin").
 		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Ongoing").
 		First(&transaction).Error; err != nil {
@@ -126,7 +125,6 @@ func (h *RentalHandler) RetryOpenDoor(c *gin.Context) {
 		return
 	}
 
-	// Trigger the lock again
 	err := esp32.RetryOpen(transaction.PowerbankStationOrigin.IPAddress)
 
 	msg := "Door open signal sent!"
@@ -134,7 +132,6 @@ func (h *RentalHandler) RetryOpenDoor(c *gin.Context) {
 		msg = "Failed to connect to station."
 	}
 
-	// Re-render success page with message
 	c.HTML(http.StatusOK, "rental_success.html", gin.H{
 		"TransactionID": transaction.ID,
 		"StationName":   transaction.PowerbankStationOrigin.Name,
@@ -195,7 +192,43 @@ func (h *RentalHandler) ReturnPowerbank(c *gin.Context) {
 	txDB.Save(&station)
 	txDB.Commit()
 
-	esp32.TriggerLock(station.IPAddress, "open")
+	// AUTOMATIC TRIGGER
+	go esp32.TriggerLock(station.IPAddress, "open")
 
-	c.Redirect(http.StatusFound, "/account")
+	// Render Success Page (Changed from Redirect)
+	c.HTML(http.StatusOK, "return_success.html", gin.H{
+		"TransactionID": transaction.ID,
+		"StationName":   station.Name,
+		"IsLoggedIn":    true,
+	})
+}
+
+// RetryReturnOpenDoor allows manual triggering from the return success page
+func (h *RentalHandler) RetryReturnOpenDoor(c *gin.Context) {
+	txID, _ := strconv.Atoi(c.PostForm("transaction_id"))
+	session := sessions.Default(c)
+	userID := session.Get("user_id").(uint)
+
+	var transaction models.Transaction
+	// Note: Status is now "Returned"
+	if err := h.DB.Preload("PowerbankStationReturn").
+		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Returned").
+		First(&transaction).Error; err != nil {
+		c.String(http.StatusBadRequest, "Invalid request or transaction not found")
+		return
+	}
+
+	err := esp32.RetryOpen(transaction.PowerbankStationReturn.IPAddress)
+
+	msg := "Door open signal sent!"
+	if err != nil {
+		msg = "Failed to connect to station."
+	}
+
+	c.HTML(http.StatusOK, "return_success.html", gin.H{
+		"TransactionID": transaction.ID,
+		"StationName":   transaction.PowerbankStationReturn.Name,
+		"Message":       msg,
+		"IsLoggedIn":    true,
+	})
 }
