@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PowerGo - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    {{ template "navbar" . }}
+    <div class="container text-center mt-5">
+        <h1 class="display-4">Always Charged, Anywhere.</h1>
+        <p class="lead">Rent a powerbank from any of our stations and return it anywhere.</p>
+        <hr class="my-4">
+        <p>Simple 24-hour rentals. Secure Payments. Instant Unlock.</p>
+        {{ if .IsLoggedIn }}
+            <a class="btn btn-primary btn-lg" href="/rental" role="button">Rent Now</a>
+        {{ else }}
+            <a class="btn btn-primary btn-lg" href="/register" role="button">Get Started</a>
+        {{ end }}
+    </div>
+</body>
+</html>
