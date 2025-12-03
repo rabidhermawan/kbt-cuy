@@ -9,15 +9,12 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-
-	// Switch import from postgres to sqlite
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
 func main() {
-	// 1. Database Connection (Local SQLite for prototyping)
-	// This creates a file named 'powerbank.db' in the project root
+	// 1. Database Connection (Local SQLite)
 	db, err := gorm.Open(sqlite.Open("powerbank.db"), &gorm.Config{})
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
@@ -26,20 +23,16 @@ func main() {
 	// 2. Migrate Schema
 	db.AutoMigrate(&models.User{}, &models.PowerbankStation{}, &models.Powerbank{}, &models.Transaction{})
 
-	// 3. Seed Demo Data (Optional - for testing)
+	// 3. Seed Demo Data
 	seedData(db)
 
 	// 4. Router Setup
 	r := gin.Default()
-
-	// Load HTML templates
 	r.LoadHTMLGlob("templates/*")
 
-	// Session Middleware
 	store := cookie.NewStore([]byte("secret"))
 	r.Use(sessions.Sessions("mysession", store))
 
-	// Handlers
 	authHandler := &handlers.AuthHandler{DB: db}
 	rentalHandler := &handlers.RentalHandler{DB: db}
 
@@ -61,17 +54,21 @@ func main() {
 	authorized.Use(AuthRequired())
 	{
 		authorized.GET("/account", authHandler.Account)
+
+		// Rental Flow
 		authorized.GET("/rental", rentalHandler.ShowRentalStations)
-		authorized.POST("/rental", rentalHandler.RentPowerbank)
+		authorized.GET("/rental/:id/pay", rentalHandler.ShowPaymentPage)
+		authorized.POST("/rental/process", rentalHandler.RentPowerbank)
+		authorized.POST("/rental/retry-open", rentalHandler.RetryOpenDoor)
+
+		// Return Flow
 		authorized.GET("/return", rentalHandler.ShowReturnStations)
 		authorized.POST("/return", rentalHandler.ReturnPowerbank)
 	}
 
-	// Run on localhost:8080
-	r.Run("127.0.0.1:8080")
+	r.Run(":8080")
 }
 
-// AuthRequired Middleware
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)

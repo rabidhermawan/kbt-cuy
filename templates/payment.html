@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    {{ template "navbar" . }}
+    <div class="container mt-5" style="max-width: 500px;">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h4>Secure Payment</h4>
+            </div>
+            <div class="card-body">
+                <p>You are renting a powerbank from: <strong>{{ .Station.Name }}</strong></p>
+                <h2 class="text-center my-4">$5.00 <small class="text-muted fs-6">/ 24 hours</small></h2>
+                
+                <hr>
+
+                <!-- Simulated Payment Form -->
+                <form action="/rental/process" method="POST">
+                    <input type="hidden" name="station_id" value="{{ .Station.ID }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Card Number</label>
+                        <input type="text" class="form-control" placeholder="0000 0000 0000 0000" required>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <label class="form-label">Expiry</label>
+                            <input type="text" class="form-control" placeholder="MM/YY" required>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">CVV</label>
+                            <input type="text" class="form-control" placeholder="123" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100 mt-4 btn-lg">Pay & Rent Now</button>
+                    <p class="text-center mt-2"><small class="text-muted">The station door will open automatically after payment.</small></p>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -12,17 +12,15 @@
         <div class="row">
             {{ range .Stations }}
             <div class="col-md-4 mb-3">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">{{ .Name }}</h5>
                         <p class="card-text">
                             Available: <strong>{{ .PowerbankLeft }}</strong> / {{ .Capacity }}<br>
-                            Location: {{ .Latitude }}, {{ .Longitude }}
+                            <small class="text-muted">Location: {{ .Latitude }}, {{ .Longitude }}</small>
                         </p>
-                        <form action="/rental" method="POST">
-                            <input type="hidden" name="station_id" value="{{ .ID }}">
-                            <button type="submit" class="btn btn-primary w-100">Pay & Rent (24h)</button>
-                        </form>
+                        <!-- Button now redirects to Payment Page -->
+                        <a href="/rental/{{ .ID }}/pay" class="btn btn-primary w-100">Select Station</a>
                     </div>
                 </div>
             </div>

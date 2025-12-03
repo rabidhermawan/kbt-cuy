@@ -19,7 +19,6 @@ type RentalHandler struct {
 // ShowRentalStations displays available stations
 func (h *RentalHandler) ShowRentalStations(c *gin.Context) {
 	var stations []models.PowerbankStation
-	// Only show stations with powerbanks
 	h.DB.Where("powerbank_left > ?", 0).Find(&stations)
 
 	c.HTML(http.StatusOK, "rental.html", gin.H{
@@ -28,13 +27,28 @@ func (h *RentalHandler) ShowRentalStations(c *gin.Context) {
 	})
 }
 
-// RentPowerbank handles the logic
+// ShowPaymentPage renders the payment confirmation screen
+func (h *RentalHandler) ShowPaymentPage(c *gin.Context) {
+	stationID := c.Param("id")
+	var station models.PowerbankStation
+	if err := h.DB.First(&station, stationID).Error; err != nil {
+		c.String(http.StatusNotFound, "Station not found")
+		return
+	}
+
+	c.HTML(http.StatusOK, "payment.html", gin.H{
+		"Station":    station,
+		"IsLoggedIn": true,
+	})
+}
+
+// RentPowerbank processes payment, creates transaction, and auto-triggers door
 func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 	stationID, _ := strconv.Atoi(c.PostForm("station_id"))
 	session := sessions.Default(c)
 	userID := session.Get("user_id").(uint)
 
-	// Transaction to ensure atomicity
+	// Start Transaction
 	tx := h.DB.Begin()
 
 	var station models.PowerbankStation
@@ -50,7 +64,7 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 		return
 	}
 
-	// Find an available powerbank at this station
+	// Find available powerbank
 	var pb models.Powerbank
 	if err := tx.Where("current_station_id = ? AND status = ?", stationID, "Available").First(&pb).Error; err != nil {
 		tx.Rollback()
@@ -58,7 +72,7 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 		return
 	}
 
-	// Create Transaction
+	// Create Transaction Record
 	transaction := models.Transaction{
 		UserID:                   userID,
 		PowerbankID:              pb.ID,
@@ -66,9 +80,9 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 		Status:                   "Ongoing",
 	}
 
-	// Update Data
+	// Update Statuses
 	pb.Status = "Rented"
-	pb.CurrentStationID = nil // It is now with the user
+	pb.CurrentStationID = nil
 	station.PowerbankLeft--
 
 	if err := tx.Save(&pb).Error; err != nil {
@@ -86,19 +100,54 @@ func (h *RentalHandler) RentPowerbank(c *gin.Context) {
 
 	tx.Commit()
 
-	// Hardware Trigger
-	esp32.TriggerLock(station.IPAddress, "open")
+	// AUTOMATIC TRIGGER: Open the door immediately upon successful processing
+	go esp32.TriggerLock(station.IPAddress, "open")
 
-	c.Redirect(http.StatusFound, "/account")
+	// Render Success Page
+	c.HTML(http.StatusOK, "rental_success.html", gin.H{
+		"TransactionID": transaction.ID,
+		"StationName":   station.Name,
+		"IsLoggedIn":    true,
+	})
+}
+
+// RetryOpenDoor allows manual triggering from the success page
+func (h *RentalHandler) RetryOpenDoor(c *gin.Context) {
+	txID, _ := strconv.Atoi(c.PostForm("transaction_id"))
+	session := sessions.Default(c)
+	userID := session.Get("user_id").(uint)
+
+	var transaction models.Transaction
+	// Validate that this transaction belongs to the logged-in user and is recent/ongoing
+	if err := h.DB.Preload("PowerbankStationOrigin").
+		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Ongoing").
+		First(&transaction).Error; err != nil {
+		c.String(http.StatusBadRequest, "Invalid request or transaction not found")
+		return
+	}
+
+	// Trigger the lock again
+	err := esp32.RetryOpen(transaction.PowerbankStationOrigin.IPAddress)
+
+	msg := "Door open signal sent!"
+	if err != nil {
+		msg = "Failed to connect to station."
+	}
+
+	// Re-render success page with message
+	c.HTML(http.StatusOK, "rental_success.html", gin.H{
+		"TransactionID": transaction.ID,
+		"StationName":   transaction.PowerbankStationOrigin.Name,
+		"Message":       msg,
+		"IsLoggedIn":    true,
+	})
 }
 
 // ShowReturnStations displays stations with empty slots
 func (h *RentalHandler) ShowReturnStations(c *gin.Context) {
 	var stations []models.PowerbankStation
-	// Only show stations with space
 	h.DB.Where("powerbank_left < capacity").Find(&stations)
 
-	// Check if user actually has an ongoing rental
 	session := sessions.Default(c)
 	userID := session.Get("user_id").(uint)
 	var activeTx models.Transaction
@@ -129,19 +178,16 @@ func (h *RentalHandler) ReturnPowerbank(c *gin.Context) {
 	var station models.PowerbankStation
 	txDB.First(&station, stationID)
 
-	// Update Transaction
 	now := time.Now()
 	rtnStationID := uint(stationID)
 	transaction.PowerbankStationReturnID = &rtnStationID
 	transaction.DateReturned = &now
 	transaction.Status = "Returned"
 
-	// Update Powerbank
 	transaction.Powerbank.Status = "Available"
 	stID := uint(station.ID)
 	transaction.Powerbank.CurrentStationID = &stID
 
-	// Update Station
 	station.PowerbankLeft++
 
 	txDB.Save(&transaction)
@@ -149,7 +195,6 @@ func (h *RentalHandler) ReturnPowerbank(c *gin.Context) {
 	txDB.Save(&station)
 	txDB.Commit()
 
-	// Hardware Trigger
 	esp32.TriggerLock(station.IPAddress, "open")
 
 	c.Redirect(http.StatusFound, "/account")
