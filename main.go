@@ -64,7 +64,7 @@ func main() {
 		// Return Flow
 		authorized.GET("/return", rentalHandler.ShowReturnStations)
 		authorized.POST("/return", rentalHandler.ReturnPowerbank)
-		authorized.POST("/return/retry-open", rentalHandler.RetryReturnOpenDoor) // New Route
+		authorized.POST("/return/retry-open", rentalHandler.RetryReturnOpenDoor)
 	}
 
 	r.Run(":8080")
@@ -87,6 +87,7 @@ func seedData(db *gorm.DB) {
 	var count int64
 	db.Model(&models.PowerbankStation{}).Count(&count)
 	if count == 0 {
+		// 1. Create Main Central Station
 		station := models.PowerbankStation{
 			Name: "Central Station", Latitude: -6.2, Longitude: 106.8, Capacity: 10, PowerbankLeft: 2, IPAddress: "192.168.1.50",
 		}
@@ -94,5 +95,14 @@ func seedData(db *gorm.DB) {
 
 		db.Create(&models.Powerbank{PowerbankCode: "PB-001", Capacity: 10000, Status: "Available", CurrentStationID: &station.ID})
 		db.Create(&models.Powerbank{PowerbankCode: "PB-002", Capacity: 10000, Status: "Available", CurrentStationID: &station.ID})
+
+		// 2. Create Single Slot Mini Station
+		miniStation := models.PowerbankStation{
+			Name: "Mini Station (Single)", Latitude: -6.25, Longitude: 106.85, Capacity: 1, PowerbankLeft: 1, IPAddress: "192.168.1.9",
+		}
+		db.Create(&miniStation)
+
+		// Add 1 Powerbank to the mini station
+		db.Create(&models.Powerbank{PowerbankCode: "PB-MINI-001", Capacity: 5000, Status: "Available", CurrentStationID: &miniStation.ID})
 	}
 }

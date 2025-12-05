@@ -36,9 +36,13 @@ func (h *RentalHandler) ShowPaymentPage(c *gin.Context) {
 		return
 	}
 
+	// Use a placeholder QR code service for the simulation
+	dummyQRCode := "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=PowerbankRentalPayment"
+
 	c.HTML(http.StatusOK, "payment.html", gin.H{
 		"Station":    station,
 		"IsLoggedIn": true,
+		"QRCodeURL":  dummyQRCode,
 	})
 }
 
