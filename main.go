@@ -1,6 +1,7 @@
 package main
 
 import (
+	"kbt-cuy/config"
 	"kbt-cuy/handlers"
 	"kbt-cuy/models"
 	"log"
@@ -14,19 +15,22 @@ import (
 )
 
 func main() {
-	// 1. Database Connection (Local SQLite)
+	// 1. Load Configuration
+	config.LoadConfig()
+
+	// 2. Database Connection (Local SQLite)
 	db, err := gorm.Open(sqlite.Open("powerbank.db"), &gorm.Config{})
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// 2. Migrate Schema
+	// 3. Migrate Schema
 	db.AutoMigrate(&models.User{}, &models.PowerbankStation{}, &models.Powerbank{}, &models.Transaction{})
 
-	// 3. Seed Demo Data
+	// 4. Seed Demo Data
 	seedData(db)
 
-	// 4. Router Setup
+	// 5. Router Setup
 	r := gin.Default()
 	r.LoadHTMLGlob("templates/*")
 
@@ -35,8 +39,10 @@ func main() {
 
 	authHandler := &handlers.AuthHandler{DB: db}
 	rentalHandler := &handlers.RentalHandler{DB: db}
+	paymentHandler := &handlers.PaymentHandler{DB: db, Core: config.MidtransCore, Snap: config.MidtransSnap}
+	mapHandler := &handlers.MapHandler{DB: db}
 
-	// 5. Routes
+	// 6. Routes
 	r.GET("/", func(c *gin.Context) {
 		session := sessions.Default(c)
 		isLoggedIn := session.Get("user_id") != nil
@@ -55,19 +61,26 @@ func main() {
 	{
 		authorized.GET("/account", authHandler.Account)
 
+		// Map View
+		authorized.GET("/map", mapHandler.ShowMap)
+
 		// Rental Flow
 		authorized.GET("/rental", rentalHandler.ShowRentalStations)
-		authorized.GET("/rental/:id/pay", rentalHandler.ShowPaymentPage)
-		authorized.POST("/rental/process", rentalHandler.RentPowerbank)
-		authorized.POST("/rental/retry-open", rentalHandler.RetryOpenDoor)
+		authorized.GET("/rental/:id/pay", paymentHandler.ShowPaymentPage)
+		authorized.POST("/payment/create", paymentHandler.CreateTransaction)
+		authorized.GET("/payment/status/:id", paymentHandler.GetPaymentStatus)
+
+		authorized.GET("/rental/success/:id", rentalHandler.RentalSuccess)
+		authorized.POST("/rental/re-open", rentalHandler.ReopenRentalDoor)
 
 		// Return Flow
 		authorized.GET("/return", rentalHandler.ShowReturnStations)
 		authorized.POST("/return", rentalHandler.ReturnPowerbank)
-		authorized.POST("/return/retry-open", rentalHandler.RetryReturnOpenDoor)
+		authorized.POST("/return/re-open", rentalHandler.ReopenReturnDoor)
 	}
 
-	r.Run(":8080")
+	r.POST("/payment/notification", paymentHandler.PaymentNotification)
+	r.Run(":8085")
 }
 
 func AuthRequired() gin.HandlerFunc {
@@ -88,21 +101,17 @@ func seedData(db *gorm.DB) {
 	db.Model(&models.PowerbankStation{}).Count(&count)
 	if count == 0 {
 		// 1. Create Main Central Station
-		station := models.PowerbankStation{
-			Name: "Central Station", Latitude: -6.2, Longitude: 106.8, Capacity: 10, PowerbankLeft: 2, IPAddress: "192.168.1.50",
+		station1 := models.PowerbankStation{
+			Name: "Kantin Pusat ITS", Latitude: -7.2839100, Longitude: 112.7940321, Capacity: 10, PowerbankLeft: 5, IPAddress: "192.168.1.50",
 		}
-		db.Create(&station)
+		db.Create(&station1)
+		db.Create(&models.Powerbank{PowerbankCode: "PB-001", Capacity: 10000, Status: "Available", CurrentStationID: &station1.ID})
+		db.Create(&models.Powerbank{PowerbankCode: "PB-002", Capacity: 10000, Status: "Available", CurrentStationID: &station1.ID})
 
-		db.Create(&models.Powerbank{PowerbankCode: "PB-001", Capacity: 10000, Status: "Available", CurrentStationID: &station.ID})
-		db.Create(&models.Powerbank{PowerbankCode: "PB-002", Capacity: 10000, Status: "Available", CurrentStationID: &station.ID})
-
-		// 2. Create Single Slot Mini Station
-		miniStation := models.PowerbankStation{
-			Name: "Mini Station (Single)", Latitude: -6.25, Longitude: 106.85, Capacity: 1, PowerbankLeft: 1, IPAddress: "192.168.1.9",
+		station2 := models.PowerbankStation{
+			Name: "Tower 2 ITS", Latitude: -7.2851831, Longitude: 112.7952606, Capacity: 8, PowerbankLeft: 3, IPAddress: "192.168.1.51",
 		}
-		db.Create(&miniStation)
-
-		// Add 1 Powerbank to the mini station
-		db.Create(&models.Powerbank{PowerbankCode: "PB-MINI-001", Capacity: 5000, Status: "Available", CurrentStationID: &miniStation.ID})
+		db.Create(&station2)
+		db.Create(&models.Powerbank{PowerbankCode: "PB-003", Capacity: 10000, Status: "Available", CurrentStationID: &station2.ID})
 	}
 }

@@ -27,119 +27,18 @@ func (h *RentalHandler) ShowRentalStations(c *gin.Context) {
 	})
 }
 
-// ShowPaymentPage renders the payment confirmation screen
-func (h *RentalHandler) ShowPaymentPage(c *gin.Context) {
-	stationID := c.Param("id")
-	var station models.PowerbankStation
-	if err := h.DB.First(&station, stationID).Error; err != nil {
-		c.String(http.StatusNotFound, "Station not found")
-		return
-	}
-
-	// Use a placeholder QR code service for the simulation
-	dummyQRCode := "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=PowerbankRentalPayment"
-
-	c.HTML(http.StatusOK, "payment.html", gin.H{
-		"Station":    station,
-		"IsLoggedIn": true,
-		"QRCodeURL":  dummyQRCode,
-	})
-}
-
-// RentPowerbank processes payment, creates transaction, and auto-triggers door
-func (h *RentalHandler) RentPowerbank(c *gin.Context) {
-	stationID, _ := strconv.Atoi(c.PostForm("station_id"))
-	session := sessions.Default(c)
-	userID := session.Get("user_id").(uint)
-
-	// Start Transaction
-	tx := h.DB.Begin()
-
-	var station models.PowerbankStation
-	if err := tx.First(&station, stationID).Error; err != nil {
-		tx.Rollback()
-		c.String(http.StatusBadRequest, "Station not found")
-		return
-	}
-
-	if station.PowerbankLeft <= 0 {
-		tx.Rollback()
-		c.String(http.StatusBadRequest, "No powerbanks available")
-		return
-	}
-
-	// Find available powerbank
-	var pb models.Powerbank
-	if err := tx.Where("current_station_id = ? AND status = ?", stationID, "Available").First(&pb).Error; err != nil {
-		tx.Rollback()
-		c.String(http.StatusInternalServerError, "Data inconsistency error")
-		return
-	}
-
-	// Create Transaction Record
-	transaction := models.Transaction{
-		UserID:                   userID,
-		PowerbankID:              pb.ID,
-		PowerbankStationOriginID: station.ID,
-		Status:                   "Ongoing",
-	}
-
-	// Update Statuses
-	pb.Status = "Rented"
-	pb.CurrentStationID = nil
-	station.PowerbankLeft--
-
-	if err := tx.Save(&pb).Error; err != nil {
-		tx.Rollback()
-		return
-	}
-	if err := tx.Save(&station).Error; err != nil {
-		tx.Rollback()
-		return
-	}
-	if err := tx.Create(&transaction).Error; err != nil {
-		tx.Rollback()
-		return
-	}
-
-	tx.Commit()
-
-	// AUTOMATIC TRIGGER
-	go esp32.TriggerLock(station.IPAddress, "open")
-
-	// Render Success Page
-	c.HTML(http.StatusOK, "rental_success.html", gin.H{
-		"TransactionID": transaction.ID,
-		"StationName":   station.Name,
-		"IsLoggedIn":    true,
-	})
-}
-
-// RetryOpenDoor allows manual triggering from the rental success page
-func (h *RentalHandler) RetryOpenDoor(c *gin.Context) {
-	txID, _ := strconv.Atoi(c.PostForm("transaction_id"))
-	session := sessions.Default(c)
-	userID := session.Get("user_id").(uint)
-
+// RentalSuccess page after successful payment and processing
+func (h *RentalHandler) RentalSuccess(c *gin.Context) {
+	txID := c.Param("id")
 	var transaction models.Transaction
-	if err := h.DB.Preload("PowerbankStationOrigin").
-		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Ongoing").
-		First(&transaction).Error; err != nil {
-		c.String(http.StatusBadRequest, "Invalid request or transaction not found")
+	if err := h.DB.Preload("PowerbankStationOrigin").First(&transaction, txID).Error; err != nil {
+		c.String(http.StatusNotFound, "Transaction not found")
 		return
-	}
-
-	err := esp32.RetryOpen(transaction.PowerbankStationOrigin.IPAddress)
-
-	msg := "Door open signal sent!"
-	if err != nil {
-		msg = "Failed to connect to station."
 	}
 
 	c.HTML(http.StatusOK, "rental_success.html", gin.H{
 		"TransactionID": transaction.ID,
 		"StationName":   transaction.PowerbankStationOrigin.Name,
-		"Message":       msg,
 		"IsLoggedIn":    true,
 	})
 }
@@ -207,32 +106,54 @@ func (h *RentalHandler) ReturnPowerbank(c *gin.Context) {
 	})
 }
 
-// RetryReturnOpenDoor allows manual triggering from the return success page
-func (h *RentalHandler) RetryReturnOpenDoor(c *gin.Context) {
-	txID, _ := strconv.Atoi(c.PostForm("transaction_id"))
+// ReopenRentalDoor allows a user to trigger the lock again after the initial rental success.
+func (h *RentalHandler) ReopenRentalDoor(c *gin.Context) {
+	txID, err := strconv.Atoi(c.PostForm("transaction_id"))
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid transaction ID")
+		return
+	}
+
 	session := sessions.Default(c)
 	userID := session.Get("user_id").(uint)
 
 	var transaction models.Transaction
-	// Note: Status is now "Returned"
-	if err := h.DB.Preload("PowerbankStationReturn").
-		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Returned").
+	if err := h.DB.Preload("PowerbankStationOrigin").
+		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Ongoing").
 		First(&transaction).Error; err != nil {
-		c.String(http.StatusBadRequest, "Invalid request or transaction not found")
+		c.String(http.StatusNotFound, "Active rental transaction not found")
 		return
 	}
 
-	err := esp32.RetryOpen(transaction.PowerbankStationReturn.IPAddress)
+	// Trigger the lock again
+	esp32.TriggerLock(transaction.PowerbankStationOrigin.IPAddress, "open")
 
-	msg := "Door open signal sent!"
+	// Redirect back to the success page with a confirmation message
+	c.Redirect(http.StatusFound, "/rental/success/"+strconv.Itoa(txID))
+}
+
+// ReopenReturnDoor allows a user to trigger the lock again during the return process.
+func (h *RentalHandler) ReopenReturnDoor(c *gin.Context) {
+	txID, err := strconv.Atoi(c.PostForm("transaction_id"))
 	if err != nil {
-		msg = "Failed to connect to station."
+		c.String(http.StatusBadRequest, "Invalid transaction ID")
+		return
 	}
 
-	c.HTML(http.StatusOK, "return_success.html", gin.H{
-		"TransactionID": transaction.ID,
-		"StationName":   transaction.PowerbankStationReturn.Name,
-		"Message":       msg,
-		"IsLoggedIn":    true,
-	})
+	session := sessions.Default(c)
+	userID := session.Get("user_id").(uint)
+
+	var transaction models.Transaction
+	if err := h.DB.Preload("PowerbankStationReturn").
+		Where("id = ? AND user_id = ? AND status = ?", txID, userID, "Returned").
+		First(&transaction).Error; err != nil {
+		c.String(http.StatusNotFound, "Return transaction not found")
+		return
+	}
+
+	// Trigger the lock again
+	esp32.TriggerLock(transaction.PowerbankStationReturn.IPAddress, "open")
+
+	// Redirect back to the return success page
+	c.Redirect(http.StatusFound, "/return/success/"+strconv.Itoa(txID))
 }

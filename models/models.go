@@ -43,12 +43,15 @@ type Transaction struct {
 	gorm.Model
 	UserID                   uint
 	User                     User
-	PowerbankID              uint
+	PowerbankID              *uint
 	Powerbank                Powerbank
 	PowerbankStationOriginID uint
 	PowerbankStationOrigin   PowerbankStation `gorm:"foreignKey:PowerbankStationOriginID"`
 	PowerbankStationReturnID *uint
 	PowerbankStationReturn   *PowerbankStation `gorm:"foreignKey:PowerbankStationReturnID"`
-	Status                   string            // "Ongoing", "Returned"
+	Status                   string            // "Pending", "Ongoing", "Returned", "Failed"
 	DateReturned             *time.Time
+	OrderID                  string `gorm:"uniqueIndex"` // Midtrans Order ID
+	PaymentToken             string // Midtrans Transaction ID
+	PaymentRedirectURL       string
 }

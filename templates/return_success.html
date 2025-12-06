@@ -30,7 +30,7 @@
                     <div class="alert alert-info">{{ .Message }}</div>
                 {{ end }}
 
-                <form action="/return/retry-open" method="POST">
+                <form action="/return/re-open" method="POST">
                     <input type="hidden" name="transaction_id" value="{{ .TransactionID }}">
                     <button type="submit" class="btn btn-warning w-100">Open Slot Again</button>
                 </form>

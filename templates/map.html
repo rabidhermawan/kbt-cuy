@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Station Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #map { height: 500px; }
+    </style>
+</head>
+<body>
+    {{ template "navbar" . }}
+    <div class="container mt-4">
+        <h2>Station Map</h2>
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([-6.2, 106.8], 13); // Default fallback view
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // --- Improved Map Logic ---
+
+        // 1. Center map on user's location if available
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                var userLatLng = [position.coords.latitude, position.coords.longitude];
+                map.setView(userLatLng, 15);
+
+                // Add a marker for the user's current location
+                L.marker(userLatLng, {
+                    icon: L.divIcon({
+                        className: 'user-location-pin',
+                        html: '<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
+                    })
+                }).addTo(map).bindPopup("Your Location");
+            });
+        }
+
+        // 2. Add markers with improved, secure popups
+        var stationsJSON = `{{ .StationsJSON }}`;
+        console.log("Stations JSON String:", stationsJSON);
+        var stations = JSON.parse(stationsJSON);
+        console.log("Parsed Stations:", stations);
+
+
+        stations.forEach(function(station) {
+            // The JSON from Go uses PascalCase, so we access properties like station.Name, station.Latitude etc.
+            var marker = L.marker([station.Latitude, station.Longitude]).addTo(map);
+
+            // Create popup content securely to prevent XSS
+            var popupContent = document.createElement('div');
+            
+            var title = document.createElement('b');
+            title.textContent = station.Name; // Use textContent to escape HTML
+            popupContent.appendChild(title);
+
+            popupContent.appendChild(document.createElement('br'));
+
+            var availability = document.createTextNode(`Available: ${station.PowerbankLeft} / ${station.Capacity}`);
+            popupContent.appendChild(availability);
+
+            popupContent.appendChild(document.createElement('br'));
+
+            // Conditionally add rent link
+            if (station.PowerbankLeft > 0) {
+                var rentLink = document.createElement('a');
+                rentLink.href = `/rental/${station.ID}/pay`;
+                rentLink.textContent = "Rent Here";
+                popupContent.appendChild(rentLink);
+            } else {
+                var fullText = document.createElement('span');
+                fullText.className = 'text-danger';
+                fullText.textContent = "Station Full";
+                popupContent.appendChild(fullText);
+            }
+            
+            marker.bindPopup(popupContent);
+        });
+    </script>
+</body>
+</html>
