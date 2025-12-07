@@ -3,6 +3,7 @@
 <head>
     <title>Rental Success</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
     {{ template "navbar" . }}
@@ -13,11 +14,11 @@
                 <h2>Rental Confirmed!</h2>
                 <p class="lead">Your powerbank is being released from <strong>{{ .StationName }}</strong>.</p>
                 <p class="text-muted">Transaction ID: {{ .TransactionID }}</p>
-                
+
                 <hr>
 
                 <p>The lock should open automatically. If it doesn't, or if you get disturbed, you can re-open it below.</p>
-                
+
                 <form action="/rental/re-open" method="POST" class="d-inline">
                     <input type="hidden" name="transaction_id" value="{{ .TransactionID }}">
                     <button type="submit" class="btn btn-warning">Re-Open Door</button>
@@ -27,5 +28,6 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

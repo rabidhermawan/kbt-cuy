@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"kbt-cuy/config"
 	"kbt-cuy/handlers"
 	"kbt-cuy/models"
@@ -10,7 +11,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -18,10 +20,14 @@ func main() {
 	// 1. Load Configuration
 	config.LoadConfig()
 
-	// 2. Database Connection (Local SQLite)
-	db, err := gorm.Open(sqlite.Open("powerbank.db"), &gorm.Config{})
+	// 2. Database Connection (Turso)
+	sqlDB, err := sql.Open("libsql", config.TursoURL+"?authToken="+config.TursoToken)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
+	}
+	db, err := gorm.Open(sqlite.Dialector{Conn: sqlDB}, &gorm.Config{})
+	if err != nil {
+		log.Fatal("Failed to initialize GORM:", err)
 	}
 
 	// 3. Migrate Schema
@@ -109,7 +115,7 @@ func seedData(db *gorm.DB) {
 		db.Create(&models.Powerbank{PowerbankCode: "PB-002", Capacity: 10000, Status: "Available", CurrentStationID: &station1.ID})
 
 		station2 := models.PowerbankStation{
-			Name: "Tower 2 ITS", Latitude: -7.2851831, Longitude: 112.7952606, Capacity: 8, PowerbankLeft: 3, IPAddress: "192.168.1.51",
+			Name: "Tower 2 ITS", Latitude: -7.2851831, Longitude: 112.7952606, Capacity: 8, PowerbankLeft: 3, IPAddress: "192.168.1.50",
 		}
 		db.Create(&station2)
 		db.Create(&models.Powerbank{PowerbankCode: "PB-003", Capacity: 10000, Status: "Available", CurrentStationID: &station2.ID})

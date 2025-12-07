@@ -2,18 +2,23 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
     <div class="container">
         <a class="navbar-brand" href="/">⚡ ChargeGo</a>
-        <div class="navbar-nav ms-auto">
-            <a class="nav-link" href="/">Home</a>
-            {{ if .IsLoggedIn }}
-                <a class="nav-link" href="/rental">Rent</a>
-                <a class="nav-link" href="/return">Return</a>
-                <a class="nav-link" href="/map">Map</a>
-                <a class="nav-link" href="/account">Account</a>
-                <a class="nav-link" href="/logout">Logout</a>
-            {{ else }}
-                <a class="nav-link" href="/login">Login</a>
-                <a class="nav-link" href="/register">Register</a>
-            {{ end }}
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">Home</a>
+                {{ if .IsLoggedIn }}
+                    <a class="nav-link" href="/rental">Rent</a>
+                    <a class="nav-link" href="/return">Return</a>
+                    <a class="nav-link" href="/map">Map</a>
+                    <a class="nav-link" href="/account">Account</a>
+                    <a class="nav-link" href="/logout">Logout</a>
+                {{ else }}
+                    <a class="nav-link" href="/login">Login</a>
+                    <a class="nav-link" href="/register">Register</a>
+                {{ end }}
+            </div>
         </div>
     </div>
 </nav>

@@ -13,6 +13,8 @@ import (
 var (
 	MidtransCore *coreapi.Client
 	MidtransSnap *snap.Client
+	TursoURL     string
+	TursoToken   string
 )
 
 func LoadConfig() {
@@ -36,4 +38,7 @@ func LoadConfig() {
 	// This is not a secure way to expose client key to frontend.
 	// We are setting it to os env for the handler to pick it up.
 	os.Setenv("MIDTRANS_CLIENT_KEY_FRONTEND", clientKey)
+
+	TursoURL = os.Getenv("TURSO_URL")
+	TursoToken = os.Getenv("TURSO_AUTH_TOKEN")
 }
