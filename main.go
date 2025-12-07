@@ -7,6 +7,7 @@ import (
 	"kbt-cuy/models"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -86,7 +87,13 @@ func main() {
 	}
 
 	r.POST("/payment/notification", paymentHandler.PaymentNotification)
-	r.Run(":8085")
+
+	// For Vercel deployment, use the PORT environment variable
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8085"
+	}
+	r.Run(":" + port)
 }
 
 func AuthRequired() gin.HandlerFunc {
